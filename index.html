@@ -1,0 +1,315 @@
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <title>OutOfSpace</title>
+        <style>
+        html, body {
+            padding: 0;
+            margin: 0;
+            overscroll-behavior: contain;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        #game-container {
+            margin-top: 1vh;
+            margin-bottom: 1vh;
+        }
+
+        #game-container p {
+            max-width: 50vh;
+            margin: 3vh auto;
+            font-size: 3vh;
+        }
+
+        p#title {
+            font-size: 5vh;
+            text-align: center;
+        }
+
+        p#credits {
+            font-size: 2vh;
+            text-align: right;
+        }
+
+        #info {
+            position: absolute;
+            text-align: center;
+            width: 100%;
+            z-index: 100;
+            font-size: 4vh;
+            top: 30vh;
+        }
+
+        #info > span {
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2vh;
+            color: lightgreen;
+        }
+
+        #info > span.error {
+            color: red;
+        }
+
+        #game {
+            font-size: 0;
+            max-width: 50vh;
+            margin: 0 auto;
+            user-select: none;
+            position: relative;
+        }
+
+        .group > div  {
+            position: relative;
+            display: inline-block;
+            vertical-align: top;
+            width: 25%;
+        }
+
+        .group > div:before {
+            content: "";
+            display: block;
+            padding-top: 100%;
+        }
+        .group > div::after {
+            position: absolute;
+            top: 2%;
+            left: 2%;
+            content: "";
+            display: block;
+            width: 96%;
+            height: 96%;
+            background: #23baff;
+            opacity: 1;
+            transition: opacity 1s ease;
+        }
+
+        .group > div.hover::after {
+            background: hsl(199, 100%, 47%);
+        }
+
+        .group > div.blown::after {
+            opacity: 0;
+        }
+
+        #players > div {
+            position: absolute;
+            top: -1.5vh;
+            left: -1.5vh;
+            width: 3vh;
+            height: 3vh;
+            border-radius: 50%;
+            background: black;
+        }
+        #players > #player {
+            background: green;
+            z-index: 1;
+        }
+        a {
+            color: #23baff;
+            font-weight: bold;
+        }
+        </style>
+    </head>
+    <body>
+        <div id="game-container">
+            <p id="title">Out Of Space</p>
+            <p>Players alive: <span id="player-count">0</span></p>
+            <div id="info"><span>Connecting...</span></div>
+            <div id="game">
+                <div class="group">
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                </div>
+                <div class="group">
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                </div>
+                <div class="group">
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                </div>
+                <div class="group">
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                </div>
+                <div id="players">
+                    <div id="player" style='display: none'></div>
+                </div>
+            </div>
+            <p id="credits">Made by <a href="https://twitter.com/AndreBaltazar" target="_blank">@AndreBaltazar</a> aka <a href="https://ldjam.com/users/mat4dor" target="_blank">MAT4DOR</a> <a href="https://ldjam.com/events/ludum-dare/42/out-of-space-multiplayer">(LD Entry)</a></p>
+        </div>
+    </body>
+    <script>
+        (function() {
+            var gameDiv = document.getElementById('game');
+            var myId = undefined;
+            var isPlaying = false;
+            var socket;
+
+            // from: https://stackoverflow.com/a/16348977/8496392
+            function stringToColour(str) {
+                var hash = 0;
+                for (var i = 0; i < str.length; i++) {
+                    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                var colour = '#';
+                for (var i = 0; i < 3; i++) {
+                    var value = (hash >> (i * 8)) & 0xFF;
+                    colour += ('00' + value.toString(16)).substr(-2);
+                }
+                return colour;
+            }
+
+
+            function initGame() {
+                socket = null;
+                socket = new WebSocket('wss://' + window.location.hostname + '/game');
+
+                socket.onmessage = function (e) {
+                    var msg = JSON.parse(e.data);
+                    if (msg.t === 's') {
+                        var elemRect = gameDiv.getBoundingClientRect();
+                        var player = document.createElement('div');
+                        player.id = 'plr' + msg.i;
+                        player.style.transform = 'translate(' + (msg.x / 512 * elemRect.width) + 'px, '+ (msg.y / 512 * elemRect.height) + 'px)';
+                        player.setAttribute('data-x', msg.x);
+                        player.setAttribute('data-y', msg.y);
+                        player.style.background = stringToColour(msg.i);
+                        document.getElementById('players').appendChild(player);
+                        countPlayers();
+                    }  else if (msg.t === 'ms') {
+                        var elemRect = gameDiv.getBoundingClientRect();
+                        var player = document.getElementById('player');
+                        player.style.transform = 'translate(' + (msg.x / 512 * elemRect.width) + 'px, '+ (msg.y / 512 * elemRect.height) + 'px)';
+                        player.setAttribute('data-x', msg.x);
+                        player.setAttribute('data-y', msg.y);
+                        player.style.background = stringToColour(msg.i);
+                        player.style.display = '';
+                        isPlaying = true;
+                        countPlayers();
+                    } else if (msg.t === 'm') {
+                        var player = document.getElementById('plr' + msg.i);
+                        var elemRect = gameDiv.getBoundingClientRect();
+                        player.style.transform = 'translate(' + (msg.x / 512 * elemRect.width) + 'px, '+ (msg.y / 512 * elemRect.height) + 'px)';
+                        player.setAttribute('data-x', msg.x);
+                        player.setAttribute('data-y', msg.y);
+                    } else if (msg.t === 'md') {
+                        isPlaying = false;
+                        var player = document.getElementById('player');
+                        player.style.display='none';
+                        countPlayers();
+                    } else if (msg.t === 'd') {
+                        var node = document.getElementById('plr' + msg.i);
+                        if (node != null) {
+                            node.parentNode.removeChild(node);
+                            countPlayers();
+                        }
+                    } else if (msg.t === 'b') {
+                        var platform = document.querySelector('.group:nth-child(' + (msg.y + 1) + ') > div:nth-child(' + (msg.x + 1) + ')');
+                        platform.className += ' blown';
+                    } else if (msg.t === 'rg') {
+                        var platforms = document.querySelectorAll('.group > div');
+                        [].forEach.call(platforms, function(platform) {
+                            platform.className = '';
+                        });
+                    }
+                };
+            
+                socket.onopen = function () {
+                    console.log('Status: Connected\n');
+                    var info = document.querySelector('#info > span');
+                    info.style = 'display: none';
+                };
+                
+                function onCloseOrError() {
+                    console.log('Status: Disconnected\n');
+                    var info = document.querySelector('#info > span');
+                    info.className = 'error';
+                    info.innerText = 'Disconnected from the server.';
+                    info.style = '';
+                    isPlaying = false;
+                    setTimeout(initGame, 2000);
+                    socket.onerror = undefined;
+                    socket.onclose = undefined;
+                };
+
+                socket.onerror = onCloseOrError;
+                socket.onclose = onCloseOrError;
+            }
+            initGame();
+
+            function countPlayers() {
+                var numPlayers = document.querySelectorAll('#players > div').length;
+                var player = document.getElementById('player');
+                if (player.style.display == 'none')
+                    numPlayers--;
+                document.getElementById('player-count').innerText = numPlayers;
+            }
+
+            function move(pageX, pageY) {
+                if (!isPlaying)
+                    return;
+                var gameRect = gameDiv.getBoundingClientRect();
+                var x = pageX - gameRect.left;
+                var y = pageY - gameRect.top;
+
+                if (x < 0) x = 0;
+                if (x > gameRect.width) x = gameRect.width;
+
+                if (y < 0) y = 0;
+                if (y > gameRect.height) y = gameRect.height;
+
+                var prevent = false;
+                [].forEach.call(document.querySelectorAll('.group > div'), function(el) {
+                    var elemRect = el.getBoundingClientRect();
+                    if (el.className.indexOf('blown') !== -1) {
+                        if (x >= (elemRect.left - gameRect.left) &&
+                            x <= (elemRect.right - gameRect.left) &&
+                            y >= (elemRect.top - gameRect.top) &&
+                            y <= (elemRect.bottom - gameRect.top)) {
+                            prevent = true;
+                            return;
+                        }
+                    }
+                    el.className = el.className.replace(/\bhover\b/, '');
+                });
+                
+                if (prevent)
+                    return false;
+
+                x = Math.round(x / gameRect.width * 512);
+                y = Math.round(y / gameRect.height * 512);
+
+                var player = document.getElementById('player');
+                player.style.transform = 'translate(' + (x / 512 * gameRect.width) + 'px, '+ (y / 512 * gameRect.height) + 'px)';
+                player.setAttribute('data-x', x);
+                player.setAttribute('data-y', y);
+
+                var px = Math.min(Math.floor(x / 128) + 1, 4);
+                var py = Math.min(Math.floor(y / 128) + 1, 4);
+                var platform = document.querySelector('.group:nth-child(' + py + ') > div:nth-child(' + px + ')');
+                platform.className = platform.className + ' hover';
+
+                socket.send(JSON.stringify({t: 'm', x: x, y: y}));
+                return false;
+            }
+        
+            document.body.addEventListener('touchmove', function(event) {
+                move(event.changedTouches[0].pageX, event.changedTouches[0].pageY);
+            });
+
+            document.body.addEventListener('mousemove', function(event) {
+                move(event.pageX, event.pageY);
+            });
+        })();
+    </script>
+</html>

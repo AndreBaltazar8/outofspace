@@ -1,0 +1,7 @@
+{
+    "address": ":4445",
+    "host": "localhost:4445",
+    "certificate": "server.crt",
+    "private-key": "server.key",
+    "":""
+}
